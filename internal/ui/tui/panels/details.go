@@ -42,29 +42,30 @@ func (p *DetailsPanel) Resize(width, height int) {
 // Render returns formatted satellite details.
 func (p *DetailsPanel) Render() string {
 	if p.satellite == nil {
-		return p.styles.Subtitle.Render(" No satellite selected")
+		hint := lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Italic(true)
+		return hint.Render(" Press tab to focus sidebar, ↑↓ to browse, enter to select")
 	}
 
 	var sb strings.Builder
 	sat := p.satellite
 
-	// Title
+	// Title line
 	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("39"))
-	sb.WriteString(titleStyle.Render(fmt.Sprintf(" SELECTED: %s", sat.Name)))
+	sb.WriteString(titleStyle.Render(fmt.Sprintf(" %s", sat.Name)))
+	constStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
+	sb.WriteString(constStyle.Render(fmt.Sprintf("  [%s]", sat.ConstellationName)))
 	sb.WriteString("\n")
 
-	// Compute velocity magnitude
+	// Velocity magnitude
 	vel := math.Sqrt(sat.Vel.X*sat.Vel.X + sat.Vel.Y*sat.Vel.Y + sat.Vel.Z*sat.Vel.Z)
 
-	// Format latitude
+	// Format coordinates
 	latDir := "N"
 	lat := sat.Geo.Latitude
 	if lat < 0 {
 		latDir = "S"
 		lat = -lat
 	}
-
-	// Format longitude
 	lonDir := "E"
 	lon := sat.Geo.Longitude
 	if lon < 0 {
@@ -72,26 +73,23 @@ func (p *DetailsPanel) Render() string {
 		lon = -lon
 	}
 
-	labelStyle := p.styles.StatusLabel
-	valueStyle := p.styles.StatusValue
+	label := p.styles.StatusLabel
+	value := p.styles.StatusValue
 
-	sb.WriteString(fmt.Sprintf(" %s %s   %s %s\n",
-		labelStyle.Render("Alt:"),
-		valueStyle.Render(fmt.Sprintf("%.1f km", sat.Geo.Altitude)),
-		labelStyle.Render("Lat:"),
-		valueStyle.Render(fmt.Sprintf("%.1f\u00b0 %s", lat, latDir)),
+	sb.WriteString(fmt.Sprintf(" %s %-12s  %s %-14s  %s %s\n",
+		label.Render("Alt:"),
+		value.Render(fmt.Sprintf("%.0f km", sat.Geo.Altitude)),
+		label.Render("Lat:"),
+		value.Render(fmt.Sprintf("%.2f° %s", lat, latDir)),
+		label.Render("Vel:"),
+		value.Render(fmt.Sprintf("%.2f km/s", vel)),
 	))
 
-	sb.WriteString(fmt.Sprintf(" %s %s   %s %s\n",
-		labelStyle.Render("Lon:"),
-		valueStyle.Render(fmt.Sprintf("%.1f\u00b0 %s", lon, lonDir)),
-		labelStyle.Render("Vel:"),
-		valueStyle.Render(fmt.Sprintf("%.2f km/s", vel)),
-	))
-
-	sb.WriteString(fmt.Sprintf(" %s %s",
-		labelStyle.Render("Constellation:"),
-		valueStyle.Render(sat.ConstellationName),
+	sb.WriteString(fmt.Sprintf(" %s %-12s  %s %-14s",
+		label.Render("     "),
+		value.Render(""),
+		label.Render("Lon:"),
+		value.Render(fmt.Sprintf("%.2f° %s", lon, lonDir)),
 	))
 
 	return sb.String()

@@ -9,6 +9,7 @@ func TestGlobeRender_ProducesOutput(t *testing.T) {
 	g := NewGlobe()
 	f := NewFrame(40, 20)
 	g.Render(f)
+	f.Swap()
 	output := f.Render()
 	if len(strings.TrimSpace(output)) == 0 {
 		t.Error("expected non-empty rendered output")
@@ -19,6 +20,7 @@ func TestGlobeRender_ContainsLandAndOcean(t *testing.T) {
 	g := NewGlobe()
 	f := NewFrame(80, 40)
 	g.Render(f)
+	f.Swap() // Move rendered content to front buffer for inspection
 
 	var hasLand, hasOcean bool
 	for y := 0; y < f.Height; y++ {
@@ -27,20 +29,12 @@ func TestGlobeRender_ContainsLandAndOcean(t *testing.T) {
 			if cell.Color == "" {
 				continue
 			}
-			// Ocean colors contain ;5;17m through ;5;27m (blue range)
-			if strings.Contains(cell.Color, ";5;17m") ||
-				strings.Contains(cell.Color, ";5;19m") ||
-				strings.Contains(cell.Color, ";5;21m") ||
-				strings.Contains(cell.Color, ";5;24m") ||
-				strings.Contains(cell.Color, ";5;27m") {
+			// Ocean cells are spaces with background color only (48;2; but no 38;2;)
+			// Land cells have both background AND foreground (48;2;...38;2;...)
+			if cell.Char == ' ' && strings.Contains(cell.Color, "48;2;") && !strings.Contains(cell.Color, "38;2;") {
 				hasOcean = true
 			}
-			// Land colors contain green/brown codes
-			if strings.Contains(cell.Color, ";5;34m") ||
-				strings.Contains(cell.Color, ";5;28m") ||
-				strings.Contains(cell.Color, ";5;130m") ||
-				strings.Contains(cell.Color, ";5;136m") ||
-				strings.Contains(cell.Color, ";5;231m") {
+			if cell.Char != ' ' && strings.Contains(cell.Color, "38;2;") {
 				hasLand = true
 			}
 		}
@@ -96,38 +90,49 @@ func TestIsLand_Ocean(t *testing.T) {
 	}
 }
 
-func TestOceanShade_ReturnsValidChars(t *testing.T) {
-	validChars := map[rune]bool{'░': true, '▒': true, '▓': true, '█': true}
+func TestOceanShade_ReturnsTrueColor(t *testing.T) {
 	for _, nz := range []float64{0.0, 0.25, 0.5, 0.75, 1.0} {
-		ch, color := OceanShade(nz)
-		if !validChars[ch] {
-			t.Errorf("OceanShade(%v) returned invalid char %q", nz, ch)
+		ch, color := OceanShade(20.0, nz, false)
+		if ch != ' ' {
+			t.Errorf("OceanShade(%v) returned char %q, want space", nz, ch)
 		}
-		if color == "" {
-			t.Errorf("OceanShade(%v) returned empty color", nz)
+		if !strings.Contains(color, "48;2;") {
+			t.Errorf("OceanShade(%v) should use true-color background, got %q", nz, color)
 		}
 	}
 }
 
-func TestAtmosphereGlow_ReturnsValidChars(t *testing.T) {
-	validChars := map[rune]bool{'·': true, '°': true, ' ': true}
-	for _, d := range []float64{0.0, 0.05, 0.1, 0.14} {
-		ch, color := AtmosphereGlow(d)
-		if !validChars[ch] {
-			t.Errorf("AtmosphereGlow(%v) returned invalid char %q", d, ch)
-		}
-		if color == "" {
-			t.Errorf("AtmosphereGlow(%v) returned empty color", d)
-		}
+func TestAtmosphereGlow_ThinHalo(t *testing.T) {
+	// Very close to edge: should produce visible glow
+	ch, color := AtmosphereGlow(0.01)
+	if ch != ' ' || color == "" {
+		t.Errorf("AtmosphereGlow(0.01) = (%q, %q), want (' ', non-empty)", ch, color)
+	}
+
+	// Far from edge: should produce nothing
+	ch, color = AtmosphereGlow(0.1)
+	if color != "" {
+		t.Errorf("AtmosphereGlow(0.1) should return empty color for far distance, got %q", color)
 	}
 }
 
 func TestLandShade_VariesByLatitude(t *testing.T) {
-	_, tropicalColor := LandShade(5, 0.8)
-	_, polarColor := LandShade(75, 0.8)
+	_, tropicalColor := LandShade(5, 0.8, false)
+	_, polarColor := LandShade(75, 0.8, false)
 
 	if tropicalColor == polarColor {
 		t.Errorf("expected different colors for tropical (%v) and polar (%v) latitudes",
 			tropicalColor, polarColor)
+	}
+}
+
+func TestLandShade_ReturnsTrueColor(t *testing.T) {
+	_, color := LandShade(20, 0.5, false)
+	// Should have both background (48;2;) and foreground (38;2;) true-color
+	if !strings.Contains(color, "48;2;") {
+		t.Errorf("LandShade should use true-color background, got %q", color)
+	}
+	if !strings.Contains(color, "38;2;") {
+		t.Errorf("LandShade should use true-color foreground, got %q", color)
 	}
 }

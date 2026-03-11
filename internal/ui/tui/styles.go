@@ -44,7 +44,8 @@ func DefaultStyles() Styles {
 			Foreground(lipgloss.Color("245")),
 		Selected: lipgloss.NewStyle().
 			Bold(true).
-			Foreground(lipgloss.Color("229")), // bright yellow
+			Foreground(lipgloss.Color("229")).          // bright yellow text
+			Background(lipgloss.Color("236")),          // dark gray background
 		Unselected: lipgloss.NewStyle().
 			Foreground(lipgloss.Color("252")),
 		StatusBar: lipgloss.NewStyle().

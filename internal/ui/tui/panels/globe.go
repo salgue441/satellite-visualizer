@@ -39,5 +39,6 @@ func (p *GlobePanel) Globe() *renderer.Globe {
 func (p *GlobePanel) Render(satellites []domain.SatelliteState) string {
 	p.globe.Render(p.frame)
 	renderer.RenderSatellites(p.frame, satellites, p.globe)
+	p.frame.Swap()
 	return p.frame.Render()
 }

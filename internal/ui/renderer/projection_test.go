@@ -54,7 +54,9 @@ func TestRotateX_90Degrees_ZAxis(t *testing.T) {
 // --- Project3DTo2D tests ---
 
 func TestProject3DTo2D_Center(t *testing.T) {
-	sx, sy, visible := Project3DTo2D(0, 0, 1, 1.0, 80, 24)
+	// sphereR=12 means sphere spans 12 rows from center. Screen 80x24.
+	// Center: sx = 40 + 0 = 40, sy = 12 - 0 = 12
+	sx, sy, visible := Project3DTo2D(0, 0, 1, 12.0, 80, 24)
 	if !visible {
 		t.Error("Center point should be visible")
 	}
@@ -64,25 +66,26 @@ func TestProject3DTo2D_Center(t *testing.T) {
 }
 
 func TestProject3DTo2D_RightEdge(t *testing.T) {
-	sx, _, visible := Project3DTo2D(1, 0, 1, 1.0, 80, 24)
+	// x=1 on unit sphere, sphereR=12, charAspect=2: sx = 40 + 1*12*2 = 64
+	sx, _, visible := Project3DTo2D(1, 0, 1, 12.0, 80, 24)
 	if !visible {
 		t.Error("Right edge point should be visible")
 	}
-	if sx != 80 {
-		t.Errorf("Right edge projected to sx=%d, want 80", sx)
+	if sx != 64 {
+		t.Errorf("Right edge projected to sx=%d, want 64", sx)
 	}
 }
 
 func TestProject3DTo2D_BehindSphere(t *testing.T) {
-	_, _, visible := Project3DTo2D(0, 0, -1, 1.0, 80, 24)
+	_, _, visible := Project3DTo2D(0, 0, -1, 12.0, 80, 24)
 	if visible {
 		t.Error("Point behind sphere should not be visible")
 	}
 }
 
 func TestProject3DTo2D_TopOfScreen(t *testing.T) {
-	// y=+radius in 3D maps to top of screen (sy near 0) via formula: sy = int((-y/r+1)*H/2)
-	_, sy, visible := Project3DTo2D(0, 1, 1, 1.0, 80, 24)
+	// y=1 on unit sphere, sphereR=12: sy = 12 - 1*12 = 0
+	_, sy, visible := Project3DTo2D(0, 1, 1, 12.0, 80, 24)
 	if !visible {
 		t.Error("Top point should be visible")
 	}
@@ -92,13 +95,13 @@ func TestProject3DTo2D_TopOfScreen(t *testing.T) {
 }
 
 func TestProject3DTo2D_BottomOfScreen(t *testing.T) {
-	// y=-radius in 3D maps to bottom of screen (sy = screenH)
-	_, sy, visible := Project3DTo2D(0, -1, 1, 1.0, 80, 24)
+	// y=-0.9 on unit sphere, sphereR=12: sy = 12 - (-0.9)*12 = 22 (near bottom)
+	_, sy, visible := Project3DTo2D(0, -0.9, 1, 12.0, 80, 24)
 	if !visible {
-		t.Error("Bottom point should be visible")
+		t.Error("Near-bottom point should be visible")
 	}
-	if sy != 24 {
-		t.Errorf("Bottom of screen sy = %d, want 24", sy)
+	if sy != 22 {
+		t.Errorf("Near-bottom sy = %d, want 22", sy)
 	}
 }
 

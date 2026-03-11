@@ -181,22 +181,14 @@ func (a *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, a.keys.Right):
 		a.globe.Globe().RotationY += 0.1
 	case key.Matches(msg, a.keys.Up):
-		if a.focused == focusSidebar {
-			a.sidebar.MoveUp()
-			if sel := a.sidebar.Selected(); sel != nil {
-				a.details.SetSatellite(sel)
-			}
-		} else {
-			a.globe.Globe().RotationX -= 0.1
+		a.sidebar.MoveUp()
+		if sel := a.sidebar.Selected(); sel != nil {
+			a.details.SetSatellite(sel)
 		}
 	case key.Matches(msg, a.keys.Down):
-		if a.focused == focusSidebar {
-			a.sidebar.MoveDown()
-			if sel := a.sidebar.Selected(); sel != nil {
-				a.details.SetSatellite(sel)
-			}
-		} else {
-			a.globe.Globe().RotationX += 0.1
+		a.sidebar.MoveDown()
+		if sel := a.sidebar.Selected(); sel != nil {
+			a.details.SetSatellite(sel)
 		}
 	case key.Matches(msg, a.keys.ZoomIn):
 		a.globe.Globe().Zoom *= 1.1
@@ -222,51 +214,62 @@ func (a *App) View() string {
 		return "Loading..."
 	}
 
-	// Calculate panel dimensions
-	sidebarWidth := min(30, a.width/4)
-	globeWidth := a.width - sidebarWidth - 4 // account for borders
-	globeHeight := a.height - 7              // room for details + status
-	detailsHeight := 4
-
-	a.globe.Resize(globeWidth, globeHeight)
-
-	// Render panels with active/inactive borders based on focus
-	var globeView, sidebarView string
-
-	if a.focused == focusGlobe {
-		globeView = a.styles.BorderActive.Width(globeWidth).Height(globeHeight).
-			Render(a.globe.Render(a.allSatellites))
-	} else {
-		globeView = a.styles.BorderInactive.Width(globeWidth).Height(globeHeight).
-			Render(a.globe.Render(a.allSatellites))
-	}
-
-	if a.focused == focusSidebar {
-		sidebarView = a.styles.BorderActive.Width(sidebarWidth).Height(globeHeight).
-			Render(a.sidebar.Render(true))
-	} else {
-		sidebarView = a.styles.BorderInactive.Width(sidebarWidth).Height(globeHeight).
-			Render(a.sidebar.Render(false))
-	}
-
-	a.status.SetFPS(a.fps)
-	detailsView := a.styles.BorderInactive.Width(globeWidth).Height(detailsHeight).
-		Render(a.details.Render())
-	statusView := a.styles.BorderInactive.Width(sidebarWidth).Height(detailsHeight).
-		Render(a.status.Render())
-
-	// Compose layout
-	topRow := lipgloss.JoinHorizontal(lipgloss.Top, globeView, sidebarView)
-	bottomRow := lipgloss.JoinHorizontal(lipgloss.Top, detailsView, statusView)
-	dashboard := lipgloss.JoinVertical(lipgloss.Left, topRow, bottomRow)
-
-	// Help overlay
+	// Help overlay takes over the entire screen
 	if a.showHelp {
 		helpView := a.help.Render()
 		return lipgloss.Place(a.width, a.height, lipgloss.Center, lipgloss.Center, helpView)
 	}
 
-	return dashboard
+	// Title bar
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("39")).
+		PaddingLeft(1)
+	pauseIndicator := ""
+	if a.paused {
+		pauseStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("196"))
+		pauseIndicator = "  " + pauseStyle.Render("[PAUSED]")
+	}
+	titleBar := titleStyle.Render("SATELLITE TRACKER") + pauseIndicator
+	titleBar = lipgloss.NewStyle().Width(a.width).Render(titleBar)
+
+	// Layout: sidebar takes fixed width, globe gets the rest
+	sidebarWidth := min(32, a.width/4)
+	globeWidth := a.width - sidebarWidth - 4 // borders
+	bottomHeight := 5
+	globeHeight := a.height - bottomHeight - 5 // borders + bottom row + title
+
+	if globeHeight < 5 {
+		globeHeight = 5
+	}
+
+	a.globe.Resize(globeWidth, globeHeight)
+
+	// Render panels with active/inactive borders based on focus
+	globeBorder := a.styles.BorderInactive
+	sidebarBorder := a.styles.BorderInactive
+	if a.focused == focusGlobe {
+		globeBorder = a.styles.BorderActive
+	} else {
+		sidebarBorder = a.styles.BorderActive
+	}
+
+	globeView := globeBorder.Width(globeWidth).Height(globeHeight).
+		Render(a.globe.Render(a.allSatellites))
+	sidebarView := sidebarBorder.Width(sidebarWidth).Height(globeHeight).
+		Render(a.sidebar.Render(a.focused == focusSidebar))
+
+	// Bottom row: details (left) + status (right)
+	a.status.SetFPS(a.fps)
+	detailsView := a.styles.BorderInactive.Width(globeWidth).Height(bottomHeight).
+		Render(a.details.Render())
+	statusView := a.styles.BorderInactive.Width(sidebarWidth).Height(bottomHeight).
+		Render(a.status.Render())
+
+	topRow := lipgloss.JoinHorizontal(lipgloss.Top, globeView, sidebarView)
+	bottomRow := lipgloss.JoinHorizontal(lipgloss.Top, detailsView, statusView)
+
+	return lipgloss.JoinVertical(lipgloss.Left, titleBar, topRow, bottomRow)
 }
 
 // flattenSatellites collects all satellites from all constellations into a single slice.
@@ -279,8 +282,14 @@ func flattenSatellites(constellations []domain.Constellation) []domain.Satellite
 }
 
 func (a *App) resizePanels() {
-	sidebarWidth := min(30, a.width/4)
-	globeHeight := a.height - 7
+	sidebarWidth := min(32, a.width/4)
+	bottomHeight := 5
+	globeHeight := a.height - bottomHeight - 5 // title bar
+
+	if globeHeight < 5 {
+		globeHeight = 5
+	}
+
 	a.globe.Resize(a.width-sidebarWidth-4, globeHeight)
 	a.sidebar = panels.NewSidebarPanel(sidebarWidth, globeHeight)
 	a.sidebar.Update(a.allSatellites)

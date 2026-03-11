@@ -55,8 +55,7 @@ func (p *SidebarPanel) MoveUp() {
 func (p *SidebarPanel) MoveDown() {
 	if p.selected < len(p.satellites)-1 {
 		p.selected++
-		// Reserve lines for title + separator
-		visibleLines := p.height - 2
+		visibleLines := p.height - 3
 		if visibleLines < 1 {
 			visibleLines = 1
 		}
@@ -104,18 +103,28 @@ func (p *SidebarPanel) filtered() []domain.SatelliteState {
 	return result
 }
 
+// constellationLipglossColor converts a constellation name to a lipgloss color string.
+func constellationLipglossColor(name string) string {
+	rgb, ok := renderer.ConstellationColors[name]
+	if !ok {
+		rgb = renderer.DefaultSatRGB
+	}
+	return fmt.Sprintf("#%02x%02x%02x", rgb[0], rgb[1], rgb[2])
+}
+
 // Render returns the styled satellite list string.
 func (p *SidebarPanel) Render(focused bool) string {
 	var sb strings.Builder
 
 	title := p.styles.Title.Render("SATELLITES")
-	sb.WriteString(title)
+	countStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
+	sb.WriteString(fmt.Sprintf("%s %s", title, countStyle.Render(fmt.Sprintf("(%d)", len(p.satellites)))))
 	sb.WriteString("\n")
-	sb.WriteString(p.styles.Subtitle.Render(" " + strings.Repeat("\u2500", p.width-2)))
+	sb.WriteString(p.styles.Subtitle.Render(strings.Repeat("─", p.width)))
 	sb.WriteString("\n")
 
 	sats := p.filtered()
-	visibleLines := p.height - 2
+	visibleLines := p.height - 3
 	if visibleLines < 1 {
 		visibleLines = 1
 	}
@@ -125,50 +134,61 @@ func (p *SidebarPanel) Render(focused bool) string {
 		return sb.String()
 	}
 
-	end := p.offset + visibleLines
-	if end > len(sats) {
-		end = len(sats)
+	end := min(p.offset+visibleLines, len(sats))
+
+	if p.offset > 0 {
+		sb.WriteString(p.styles.Subtitle.Render(fmt.Sprintf(" ▲ %d more", p.offset)))
+		sb.WriteString("\n")
+		end = min(p.offset+visibleLines-1, len(sats))
 	}
 
 	for i := p.offset; i < end; i++ {
 		sat := sats[i]
 
-		// Pick icon
-		icon := "\u25cf" // ●
+		icon := "●"
 		if sat.ConstellationName == "stations" {
-			icon = "\u2605" // ★
-		}
-
-		// Pick color from constellation colors
-		color, ok := renderer.ConstellationColors[sat.ConstellationName]
-		if !ok {
-			color = renderer.DefaultSatColor
+			icon = "★"
 		}
 
 		name := sat.Name
-		if len(name) > p.width-4 {
-			name = name[:p.width-4]
+		maxName := p.width - 4
+		if maxName < 4 {
+			maxName = 4
+		}
+		if len(name) > maxName {
+			name = name[:maxName-1] + "…"
 		}
 
 		line := fmt.Sprintf(" %s %s", icon, name)
 
 		if i == p.selected {
-			// Apply color via raw ANSI since constellation colors are ANSI strings
-			style := p.styles.Selected
-			if color != "" {
-				style = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("229"))
+			padded := line
+			for len(padded) < p.width {
+				padded += " "
 			}
-			sb.WriteString(style.Render(line))
+			selectedStyle := lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("16")).
+				Background(lipgloss.Color("39"))
+			sb.WriteString(selectedStyle.Render(padded))
 		} else {
-			// Use the constellation color via lipgloss
-			style := p.styles.Unselected
-			_ = color // constellation color used for the icon in the rendered string
-			sb.WriteString(style.Render(line))
+			// Color the icon with constellation color
+			iconColor := constellationLipglossColor(sat.ConstellationName)
+			iconStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(iconColor))
+			nameStyle := p.styles.Unselected
+
+			sb.WriteString(fmt.Sprintf(" %s %s", iconStyle.Render(icon), nameStyle.Render(name)))
 		}
 
 		if i < end-1 {
 			sb.WriteString("\n")
 		}
+	}
+
+	remaining := len(sats) - end
+	if remaining > 0 {
+		sb.WriteString("\n")
+		sb.WriteString(p.styles.Subtitle.Render(fmt.Sprintf(" ▼ %d more", remaining)))
 	}
 
 	if p.searching {

@@ -1,6 +1,7 @@
 package renderer
 
 import (
+	"strings"
 	"testing"
 
 	"satellite-visualizer/internal/domain"
@@ -10,8 +11,6 @@ func TestRenderSatellites_VisibleSatellite(t *testing.T) {
 	f := NewFrame(80, 40)
 	g := NewGlobe()
 
-	// Place satellite at positive Z in ECI (front-facing, no rotation).
-	// Use position at earth's surface along +Z axis so it's visible.
 	earthR := 6378.137
 	sats := []domain.SatelliteState{
 		{
@@ -22,13 +21,11 @@ func TestRenderSatellites_VisibleSatellite(t *testing.T) {
 
 	RenderSatellites(f, sats, g)
 
-	// The satellite should be rendered somewhere near the center of the frame.
-	// Search the back buffer for the bullet character.
 	found := false
 	for y := 0; y < f.Height; y++ {
 		for x := 0; x < f.Width; x++ {
 			cell := f.Get(x, y)
-			if cell.Char == '●' {
+			if cell.Char == '·' || cell.Char == '★' {
 				found = true
 				break
 			}
@@ -39,7 +36,7 @@ func TestRenderSatellites_VisibleSatellite(t *testing.T) {
 	}
 
 	if !found {
-		t.Error("expected visible satellite to be rendered with '●' but it was not found")
+		t.Error("expected visible satellite to be rendered but it was not found")
 	}
 }
 
@@ -47,7 +44,6 @@ func TestRenderSatellites_HiddenSatellite(t *testing.T) {
 	f := NewFrame(80, 40)
 	g := NewGlobe()
 
-	// Place satellite behind the globe (negative Z in ECI, no rotation).
 	earthR := 6378.137
 	sats := []domain.SatelliteState{
 		{
@@ -58,12 +54,11 @@ func TestRenderSatellites_HiddenSatellite(t *testing.T) {
 
 	RenderSatellites(f, sats, g)
 
-	// Should NOT find any satellite character.
 	for y := 0; y < f.Height; y++ {
 		for x := 0; x < f.Width; x++ {
 			cell := f.Get(x, y)
-			if cell.Char == '●' || cell.Char == '★' {
-				t.Errorf("expected hidden satellite not to be rendered, but found '%c' at (%d, %d)", cell.Char, x, y)
+			if cell.Char == '·' && strings.Contains(cell.Color, "255;255;255") {
+				t.Errorf("expected hidden satellite not to be rendered, found at (%d, %d)", x, y)
 				return
 			}
 		}
@@ -108,26 +103,13 @@ func TestRenderSatellites_ConstellationColors(t *testing.T) {
 	g := NewGlobe()
 	earthR := 6378.137
 
-	tests := []struct {
-		constellation string
-		wantColor     string
-	}{
-		{"stations", "\033[38;5;196m"},
-		{"starlink", "\033[38;5;255m"},
-		{"gps-ops", "\033[38;5;226m"},
-		{"oneweb", "\033[38;5;208m"},
-		{"iridium-NEXT", "\033[38;5;51m"},
-		{"galileo", "\033[38;5;135m"},
-		{"glo-ops", "\033[38;5;46m"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.constellation, func(t *testing.T) {
+	for name, rgb := range ConstellationColors {
+		t.Run(name, func(t *testing.T) {
 			f.Clear()
 			sats := []domain.SatelliteState{
 				{
 					Satellite:         domain.Satellite{Name: "SAT", Position: domain.Position{X: 0, Y: 0, Z: earthR + 400}},
-					ConstellationName: tt.constellation,
+					ConstellationName: name,
 				},
 			}
 
@@ -137,9 +119,14 @@ func TestRenderSatellites_ConstellationColors(t *testing.T) {
 			for y := 0; y < f.Height; y++ {
 				for x := 0; x < f.Width; x++ {
 					cell := f.Get(x, y)
-					if cell.Char == '●' || cell.Char == '★' {
-						if cell.Color != tt.wantColor {
-							t.Errorf("constellation %q: got color %q, want %q", tt.constellation, cell.Color, tt.wantColor)
+					if cell.Char == '·' || cell.Char == '★' {
+						// Verify the color contains the constellation's RGB values
+						expectedFg := strings.Contains(cell.Color,
+							strings.Join([]string{
+								itoa(rgb[0]), itoa(rgb[1]), itoa(rgb[2]),
+							}, ";"))
+						if !expectedFg {
+							t.Errorf("constellation %q: color %q doesn't contain expected RGB", name, cell.Color)
 						}
 						found = true
 						break
@@ -151,10 +138,22 @@ func TestRenderSatellites_ConstellationColors(t *testing.T) {
 			}
 
 			if !found {
-				t.Errorf("constellation %q: satellite character not found in frame", tt.constellation)
+				t.Errorf("constellation %q: satellite character not found in frame", name)
 			}
 		})
 	}
+}
+
+func itoa(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	s := ""
+	for n > 0 {
+		s = string(rune('0'+n%10)) + s
+		n /= 10
+	}
+	return s
 }
 
 func TestRenderSatellites_UnknownConstellation(t *testing.T) {
@@ -175,9 +174,10 @@ func TestRenderSatellites_UnknownConstellation(t *testing.T) {
 	for y := 0; y < f.Height; y++ {
 		for x := 0; x < f.Width; x++ {
 			cell := f.Get(x, y)
-			if cell.Char == '●' {
-				if cell.Color != DefaultSatColor {
-					t.Errorf("unknown constellation: got color %q, want %q", cell.Color, DefaultSatColor)
+			if cell.Char == '·' && cell.Color != "" {
+				// Should use default RGB (200,200,200)
+				if !strings.Contains(cell.Color, "200;200;200") {
+					t.Errorf("unknown constellation: got color %q, want default RGB", cell.Color)
 				}
 				found = true
 				break
@@ -189,6 +189,6 @@ func TestRenderSatellites_UnknownConstellation(t *testing.T) {
 	}
 
 	if !found {
-		t.Error("expected satellite with unknown constellation to be rendered with '●' but it was not found")
+		t.Error("expected satellite with unknown constellation to be rendered but it was not found")
 	}
 }

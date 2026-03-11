@@ -2,31 +2,21 @@ package renderer
 
 import "fmt"
 
-// OceanShade returns the character and ANSI color for an ocean cell.
-// normalZ controls brightness (closer to camera = brighter).
-func OceanShade(normalZ float64) (rune, string) {
-	// Map normalZ [0,1] to shade levels
-	var ch rune
-	var colorCode int
+// OceanShade returns a styled cell for ocean areas.
+// Shows subtle depth variation and optional grid lines.
+func OceanShade(lat, normalZ float64, onGrid bool) (rune, string) {
+	// Dark teal at edges, slightly lighter center
+	r := int(3 + normalZ*8)
+	g := int(10 + normalZ*18)
+	b := int(20 + normalZ*30)
 
-	switch {
-	case normalZ > 0.8:
-		ch = '█'
-		colorCode = 27 // bright blue
-	case normalZ > 0.5:
-		ch = '▓'
-		colorCode = 24
-	case normalZ > 0.25:
-		ch = '▒'
-		colorCode = 21
-	case normalZ > 0.1:
-		ch = '░'
-		colorCode = 19
-	default:
-		ch = '░'
-		colorCode = 17 // dark blue
+	if onGrid {
+		// Faint grid line — slightly brighter teal foreground on ocean bg
+		gr := int(8 + normalZ*15)
+		gg := int(25 + normalZ*35)
+		gb := int(40 + normalZ*50)
+		return '·', fmt.Sprintf("\033[48;2;%d;%d;%dm\033[38;2;%d;%d;%dm", r, g, b, gr, gg, gb)
 	}
 
-	color := fmt.Sprintf("\033[38;5;%dm", colorCode)
-	return ch, color
+	return ' ', fmt.Sprintf("\033[48;2;%d;%d;%dm", r, g, b)
 }

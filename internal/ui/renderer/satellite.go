@@ -1,33 +1,36 @@
 package renderer
 
 import (
+	"fmt"
 	"math"
+	"strings"
 
 	"satellite-visualizer/internal/domain"
 )
 
-// ConstellationColors maps constellation names to ANSI color codes.
-var ConstellationColors = map[string]string{
-	"stations":     "\033[38;5;196m", // red (ISS etc)
-	"starlink":     "\033[38;5;255m", // white
-	"gps-ops":      "\033[38;5;226m", // yellow
-	"oneweb":       "\033[38;5;208m", // orange
-	"iridium-NEXT": "\033[38;5;51m",  // cyan
-	"galileo":      "\033[38;5;135m", // purple
-	"glo-ops":      "\033[38;5;46m",  // green
+// ConstellationColors maps constellation names to RGB foreground colors.
+var ConstellationColors = map[string][3]int{
+	"stations":     {255, 80, 80},  // red
+	"starlink":     {255, 255, 255}, // white
+	"gps-ops":      {255, 220, 50},  // yellow
+	"oneweb":       {255, 160, 50},  // orange
+	"iridium-NEXT": {80, 220, 255},  // cyan
+	"galileo":      {180, 100, 255}, // purple
+	"glo-ops":      {80, 255, 80},   // green
 }
 
-// DefaultSatColor is used when a constellation has no specific color.
-var DefaultSatColor = "\033[38;5;250m" // light gray
+// DefaultSatRGB is used when a constellation has no specific color.
+var DefaultSatRGB = [3]int{200, 200, 200}
 
 // RenderSatellites draws satellite positions onto the frame.
-// Each satellite's ECI position is projected onto the globe using the same
-// rotation parameters as the globe rendering.
+// Satellites appear as bright colored symbols on the dark globe background.
 func RenderSatellites(f *Frame, satellites []domain.SatelliteState, g *Globe) {
 	earthRadius := 6378.137 // km
 
+	// Sphere radius in row-units, must match globe.go Render()
+	sphereR := float64(f.Height) * 0.45 * g.Zoom
+
 	for _, sat := range satellites {
-		// Normalize position to unit sphere (ECI coords are in km)
 		dist := math.Sqrt(sat.Position.X*sat.Position.X +
 			sat.Position.Y*sat.Position.Y +
 			sat.Position.Z*sat.Position.Z)
@@ -35,8 +38,11 @@ func RenderSatellites(f *Frame, satellites []domain.SatelliteState, g *Globe) {
 			continue
 		}
 
-		// Normalize to slightly above unit sphere (satellites are above surface)
-		scale := 1.02 // slightly above globe surface for visibility
+		// Normalize to slightly above unit sphere for visibility
+		scale := 1.0 + (dist/earthRadius-1.0)*0.02 // subtle offset
+		if scale < 1.01 {
+			scale = 1.01
+		}
 		nx := sat.Position.X / earthRadius * scale
 		ny := sat.Position.Y / earthRadius * scale
 		nz := sat.Position.Z / earthRadius * scale
@@ -45,28 +51,44 @@ func RenderSatellites(f *Frame, satellites []domain.SatelliteState, g *Globe) {
 		rx, ry, rz := RotateY(nx, ny, nz, -g.RotationY)
 		rx, ry, rz = RotateX(rx, ry, rz, -g.RotationX)
 
-		// Only render if on visible hemisphere (z > 0)
+		// Only render if on visible hemisphere
 		if rz <= 0 {
 			continue
 		}
 
-		// Project to screen coordinates
-		sx, sy, visible := Project3DTo2D(rx, ry, rz, g.Radius*g.Zoom, f.Width, f.Height)
+		sx, sy, visible := Project3DTo2D(rx, ry, rz, sphereR, f.Width, f.Height)
 		if !visible {
 			continue
 		}
 
-		// Pick character and color
-		ch := '●'
+		// Pick character
+		ch := '·'
 		if sat.ConstellationName == "stations" {
-			ch = '★' // special char for ISS/stations
+			ch = '★'
 		}
 
-		color, ok := ConstellationColors[sat.ConstellationName]
+		// Get constellation color
+		rgb, ok := ConstellationColors[sat.ConstellationName]
 		if !ok {
-			color = DefaultSatColor
+			rgb = DefaultSatRGB
 		}
 
+		// Use the existing background from whatever is already rendered at this cell
+		existing := f.Get(sx, sy)
+		bgColor := ""
+		if existing.Color != "" {
+			// Extract background color (48;2;R;G;B) if present
+			if idx := strings.Index(existing.Color, "48;2;"); idx >= 0 {
+				end := strings.IndexByte(existing.Color[idx+5:], 'm')
+				if end >= 0 {
+					bgColor = existing.Color[idx : idx+5+end+1]
+				}
+			}
+		}
+		if bgColor == "" {
+			bgColor = "48;2;5;15;30m"
+		}
+		color := fmt.Sprintf("\033[%s\033[38;2;%d;%d;%dm", bgColor, rgb[0], rgb[1], rgb[2])
 		f.Set(sx, sy, ch, color)
 	}
 }
