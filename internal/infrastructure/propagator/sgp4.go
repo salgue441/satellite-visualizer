@@ -202,6 +202,14 @@ func (p *SGP4Propagator) Propagate(
 	xmdf := st.M0 + st.Mdot*tsince
 	wdf := st.w0 + st.wdot*tsince
 	xnoddf := st.raan0 + st.raandot*tsince
+
+	// Apply deep-space lunar-solar corrections if applicable
+	if IsDeepSpace(elements.MeanMotion) {
+		ds := initDeepSpace(elements.Inclination, elements.Eccentricity,
+			elements.RAAN, elements.ArgPerigee, elements.MeanMotion)
+		xnoddf, wdf, xmdf = applyDeepSpace(ds, xnoddf, wdf, xmdf, tsince)
+	}
+
 	omega := wdf
 	xmp := xmdf
 
