@@ -1,14 +1,13 @@
 package renderer
 
 import (
-	"strings"
 	"testing"
 
 	"satellite-visualizer/internal/domain"
 )
 
 func TestRenderSatellites_VisibleSatellite(t *testing.T) {
-	f := NewFrame(80, 40)
+	pb := NewPixelBuffer(80, 80)
 	g := NewGlobe()
 
 	earthR := 6378.137
@@ -19,13 +18,15 @@ func TestRenderSatellites_VisibleSatellite(t *testing.T) {
 		},
 	}
 
-	RenderSatellites(f, sats, g)
+	g.Render(pb)
+	RenderSatellites(pb, sats, g)
 
+	// Starlink is white (255,255,255) — look for that pixel
+	white := RGB{255, 255, 255}
 	found := false
-	for y := 0; y < f.Height; y++ {
-		for x := 0; x < f.Width; x++ {
-			cell := f.Get(x, y)
-			if cell.Char == '·' || cell.Char == '★' {
+	for y := 0; y < pb.Height; y++ {
+		for x := 0; x < pb.Width; x++ {
+			if pb.Get(x, y) == white {
 				found = true
 				break
 			}
@@ -36,12 +37,12 @@ func TestRenderSatellites_VisibleSatellite(t *testing.T) {
 	}
 
 	if !found {
-		t.Error("expected visible satellite to be rendered but it was not found")
+		t.Error("expected visible satellite to be rendered but no white pixel was found")
 	}
 }
 
 func TestRenderSatellites_HiddenSatellite(t *testing.T) {
-	f := NewFrame(80, 40)
+	pb := NewPixelBuffer(80, 80)
 	g := NewGlobe()
 
 	earthR := 6378.137
@@ -52,21 +53,22 @@ func TestRenderSatellites_HiddenSatellite(t *testing.T) {
 		},
 	}
 
-	RenderSatellites(f, sats, g)
+	g.Render(pb)
+	RenderSatellites(pb, sats, g)
 
-	for y := 0; y < f.Height; y++ {
-		for x := 0; x < f.Width; x++ {
-			cell := f.Get(x, y)
-			if cell.Char == '·' && strings.Contains(cell.Color, "255;255;255") {
-				t.Errorf("expected hidden satellite not to be rendered, found at (%d, %d)", x, y)
+	white := RGB{255, 255, 255}
+	for y := 0; y < pb.Height; y++ {
+		for x := 0; x < pb.Width; x++ {
+			if pb.Get(x, y) == white {
+				t.Errorf("expected hidden satellite not to be rendered, found white pixel at (%d, %d)", x, y)
 				return
 			}
 		}
 	}
 }
 
-func TestRenderSatellites_StationGetsStarChar(t *testing.T) {
-	f := NewFrame(80, 40)
+func TestRenderSatellites_StationGets2x2Block(t *testing.T) {
+	pb := NewPixelBuffer(80, 80)
 	g := NewGlobe()
 
 	earthR := 6378.137
@@ -77,35 +79,32 @@ func TestRenderSatellites_StationGetsStarChar(t *testing.T) {
 		},
 	}
 
-	RenderSatellites(f, sats, g)
+	g.Render(pb)
+	RenderSatellites(pb, sats, g)
 
-	found := false
-	for y := 0; y < f.Height; y++ {
-		for x := 0; x < f.Width; x++ {
-			cell := f.Get(x, y)
-			if cell.Char == '★' {
-				found = true
-				break
+	stationColor := RGB{255, 80, 80}
+	count := 0
+	for y := 0; y < pb.Height; y++ {
+		for x := 0; x < pb.Width; x++ {
+			if pb.Get(x, y) == stationColor {
+				count++
 			}
-		}
-		if found {
-			break
 		}
 	}
 
-	if !found {
-		t.Error("expected station satellite to be rendered with '★' but it was not found")
+	if count < 4 {
+		t.Errorf("expected station satellite to have at least 4 red pixels (2x2 block), got %d", count)
 	}
 }
 
 func TestRenderSatellites_ConstellationColors(t *testing.T) {
-	f := NewFrame(80, 40)
-	g := NewGlobe()
 	earthR := 6378.137
 
 	for name, rgb := range ConstellationColors {
 		t.Run(name, func(t *testing.T) {
-			f.Clear()
+			pb := NewPixelBuffer(80, 80)
+			g := NewGlobe()
+
 			sats := []domain.SatelliteState{
 				{
 					Satellite:         domain.Satellite{Name: "SAT", Position: domain.Position{X: 0, Y: 0, Z: earthR + 400}},
@@ -113,21 +112,14 @@ func TestRenderSatellites_ConstellationColors(t *testing.T) {
 				},
 			}
 
-			RenderSatellites(f, sats, g)
+			g.Render(pb)
+			RenderSatellites(pb, sats, g)
 
+			expected := RGB{uint8(rgb[0]), uint8(rgb[1]), uint8(rgb[2])}
 			found := false
-			for y := 0; y < f.Height; y++ {
-				for x := 0; x < f.Width; x++ {
-					cell := f.Get(x, y)
-					if cell.Char == '·' || cell.Char == '★' {
-						// Verify the color contains the constellation's RGB values
-						expectedFg := strings.Contains(cell.Color,
-							strings.Join([]string{
-								itoa(rgb[0]), itoa(rgb[1]), itoa(rgb[2]),
-							}, ";"))
-						if !expectedFg {
-							t.Errorf("constellation %q: color %q doesn't contain expected RGB", name, cell.Color)
-						}
+			for y := 0; y < pb.Height; y++ {
+				for x := 0; x < pb.Width; x++ {
+					if pb.Get(x, y) == expected {
 						found = true
 						break
 					}
@@ -138,26 +130,14 @@ func TestRenderSatellites_ConstellationColors(t *testing.T) {
 			}
 
 			if !found {
-				t.Errorf("constellation %q: satellite character not found in frame", name)
+				t.Errorf("constellation %q: expected pixel with RGB(%d,%d,%d) not found", name, rgb[0], rgb[1], rgb[2])
 			}
 		})
 	}
 }
 
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	s := ""
-	for n > 0 {
-		s = string(rune('0'+n%10)) + s
-		n /= 10
-	}
-	return s
-}
-
 func TestRenderSatellites_UnknownConstellation(t *testing.T) {
-	f := NewFrame(80, 40)
+	pb := NewPixelBuffer(80, 80)
 	g := NewGlobe()
 	earthR := 6378.137
 
@@ -168,17 +148,14 @@ func TestRenderSatellites_UnknownConstellation(t *testing.T) {
 		},
 	}
 
-	RenderSatellites(f, sats, g)
+	g.Render(pb)
+	RenderSatellites(pb, sats, g)
 
+	defaultColor := RGB{200, 200, 200}
 	found := false
-	for y := 0; y < f.Height; y++ {
-		for x := 0; x < f.Width; x++ {
-			cell := f.Get(x, y)
-			if cell.Char == '·' && cell.Color != "" {
-				// Should use default RGB (200,200,200)
-				if !strings.Contains(cell.Color, "200;200;200") {
-					t.Errorf("unknown constellation: got color %q, want default RGB", cell.Color)
-				}
+	for y := 0; y < pb.Height; y++ {
+		for x := 0; x < pb.Width; x++ {
+			if pb.Get(x, y) == defaultColor {
 				found = true
 				break
 			}
@@ -189,6 +166,6 @@ func TestRenderSatellites_UnknownConstellation(t *testing.T) {
 	}
 
 	if !found {
-		t.Error("expected satellite with unknown constellation to be rendered but it was not found")
+		t.Error("expected satellite with unknown constellation to use default RGB(200,200,200) but pixel was not found")
 	}
 }

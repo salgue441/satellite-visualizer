@@ -8,7 +8,7 @@ import (
 // GlobePanel wraps the 3D globe renderer.
 type GlobePanel struct {
 	globe  *renderer.Globe
-	frame  *renderer.Frame
+	pb     *renderer.PixelBuffer
 	width  int
 	height int
 }
@@ -17,7 +17,7 @@ type GlobePanel struct {
 func NewGlobePanel(width, height int) *GlobePanel {
 	return &GlobePanel{
 		globe:  renderer.NewGlobe(),
-		frame:  renderer.NewFrame(width, height),
+		pb:     renderer.NewPixelBuffer(width, height*2),
 		width:  width,
 		height: height,
 	}
@@ -27,7 +27,7 @@ func NewGlobePanel(width, height int) *GlobePanel {
 func (p *GlobePanel) Resize(width, height int) {
 	p.width = width
 	p.height = height
-	p.frame = renderer.NewFrame(width, height)
+	p.pb = renderer.NewPixelBuffer(width, height*2)
 }
 
 // Globe returns the underlying globe for rotation/zoom control.
@@ -36,12 +36,8 @@ func (p *GlobePanel) Globe() *renderer.Globe {
 }
 
 // Render draws the globe and satellites, returns the rendered string.
-// TODO(task4): migrate to PixelBuffer-based rendering
 func (p *GlobePanel) Render(satellites []domain.SatelliteState) string {
-	// Temporarily commented out: globe.Render now takes *PixelBuffer (Task 3).
-	// Will be updated in Task 4 to use PixelBuffer pipeline.
-	_ = satellites
-	_ = p.globe
-	_ = p.frame
-	return ""
+	p.globe.Render(p.pb)
+	renderer.RenderSatellites(p.pb, satellites, p.globe)
+	return p.pb.CompositeHalfBlocks()
 }
