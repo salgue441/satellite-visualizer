@@ -749,23 +749,55 @@ var continents = [][]GeoPoint{
 	},
 }
 
+// ContinentBBox holds precomputed bounding box for a continent polygon.
+type ContinentBBox struct {
+	MinLat, MaxLat, MinLon, MaxLon float64
+}
+
+var continentBBoxes []ContinentBBox
+
+func init() {
+	continentBBoxes = make([]ContinentBBox, len(continents))
+	for i, poly := range continents {
+		if len(poly) == 0 {
+			continue
+		}
+		bb := ContinentBBox{
+			MinLat: poly[0].Lat, MaxLat: poly[0].Lat,
+			MinLon: poly[0].Lon, MaxLon: poly[0].Lon,
+		}
+		for _, p := range poly[1:] {
+			if p.Lat < bb.MinLat {
+				bb.MinLat = p.Lat
+			}
+			if p.Lat > bb.MaxLat {
+				bb.MaxLat = p.Lat
+			}
+			if p.Lon < bb.MinLon {
+				bb.MinLon = p.Lon
+			}
+			if p.Lon > bb.MaxLon {
+				bb.MaxLon = p.Lon
+			}
+		}
+		bb.MinLat -= 0.5
+		bb.MaxLat += 0.5
+		bb.MinLon -= 0.5
+		bb.MaxLon += 0.5
+		continentBBoxes[i] = bb
+	}
+}
+
 // IsLand returns true if the given lat/lon falls on a landmass.
-// Uses ray-casting point-in-polygon test with a small buffer to handle
-// coastal cities and vertex edge cases at terminal rendering resolution.
+// Uses bounding-box pre-check and ray-casting point-in-polygon test.
 func IsLand(lat, lon float64) bool {
-	// Check exact point first
-	for _, poly := range continents {
+	for i, poly := range continents {
+		bb := continentBBoxes[i]
+		if lat < bb.MinLat || lat > bb.MaxLat || lon < bb.MinLon || lon > bb.MaxLon {
+			continue
+		}
 		if pointInPolygon(lat, lon, poly) {
 			return true
-		}
-	}
-	// Small buffer (~50km) for coastal areas and edge cases
-	const buf = 0.5
-	for _, off := range [4][2]float64{{buf, 0}, {-buf, 0}, {0, buf}, {0, -buf}} {
-		for _, poly := range continents {
-			if pointInPolygon(lat+off[0], lon+off[1], poly) {
-				return true
-			}
 		}
 	}
 	return false
