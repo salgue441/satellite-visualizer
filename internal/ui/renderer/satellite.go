@@ -26,7 +26,7 @@ var DefaultSatRGB = [3]int{200, 200, 200}
 func RenderSatellites(pb *PixelBuffer, satellites []domain.SatelliteState, g *Globe) {
 	earthRadius := 6378.137
 	termH := float64(pb.Height) / 2.0
-	sphereR := termH * 0.45 * g.Zoom
+	sphereR := termH * 0.80 * g.Zoom
 	const pixelAspect = 1.0
 
 	// Track which pixels already have a satellite so we don't stack blends.

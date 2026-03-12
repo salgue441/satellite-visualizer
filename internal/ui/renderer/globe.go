@@ -29,7 +29,7 @@ func (g *Globe) Render(pb *PixelBuffer) {
 	cx := float64(w) / 2.0
 	cy := float64(h) / 2.0
 	termH := float64(h) / 2.0
-	sphereR := termH * 0.45 * g.Zoom
+	sphereR := termH * 0.80 * g.Zoom
 
 	const pixelAspect = 1.0
 
