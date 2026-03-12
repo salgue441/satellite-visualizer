@@ -29,6 +29,10 @@ func RenderSatellites(pb *PixelBuffer, satellites []domain.SatelliteState, g *Gl
 	sphereR := termH * 0.45 * g.Zoom
 	const pixelAspect = 1.0
 
+	// Track which pixels already have a satellite so we don't stack blends.
+	// Multiple satellites hitting the same pixel would accumulate toward white.
+	occupied := make([]bool, pb.Width*pb.Height)
+
 	for _, sat := range satellites {
 		dist := math.Sqrt(sat.Position.X*sat.Position.X +
 			sat.Position.Y*sat.Position.Y +
@@ -38,7 +42,6 @@ func RenderSatellites(pb *PixelBuffer, satellites []domain.SatelliteState, g *Gl
 		}
 
 		// Project satellite position slightly above the globe surface.
-		// Use a larger offset so satellites visually separate from the surface.
 		altRatio := dist/earthRadius - 1.0 // 0.0 at surface, ~0.086 for Starlink
 		scale := 1.0 + altRatio*0.15       // spread higher orbits out more
 		if scale < 1.02 {
@@ -68,15 +71,9 @@ func RenderSatellites(pb *PixelBuffer, satellites []domain.SatelliteState, g *Gl
 			rgb = DefaultSatRGB
 		}
 
-		// Blend satellite color with the underlying globe pixel using screen blend.
-		// This keeps the globe visible under dense constellations like Starlink.
-		// Stations get full opacity (they're few and important).
-		bg := pb.Get(px, py)
-		var blended RGB
+		// Stations get full opacity and a 2x2 block (they're few and important).
 		if sat.ConstellationName == "stations" {
-			// Full opacity for stations — they're important and few
-			blended = RGB{R: uint8(rgb[0]), G: uint8(rgb[1]), B: uint8(rgb[2])}
-			// Also render a 2x2 block for visibility
+			blended := RGB{R: uint8(rgb[0]), G: uint8(rgb[1]), B: uint8(rgb[2])}
 			pb.Set(px, py, blended)
 			pb.Set(px+1, py, blended)
 			pb.Set(px, py+1, blended)
@@ -84,9 +81,17 @@ func RenderSatellites(pb *PixelBuffer, satellites []domain.SatelliteState, g *Gl
 			continue
 		}
 
-		// Screen blend: result = 1 - (1-a)(1-b), keeps things bright but not overblown
-		const alpha = 0.6 // satellite opacity
-		blended = RGB{
+		// Skip if this pixel already has a satellite — prevents blend stacking.
+		idx := py*pb.Width + px
+		if occupied[idx] {
+			continue
+		}
+		occupied[idx] = true
+
+		// Blend satellite color with the underlying globe pixel.
+		bg := pb.Get(px, py)
+		const alpha = 0.4
+		blended := RGB{
 			R: uint8(float64(bg.R)*(1-alpha) + float64(rgb[0])*alpha),
 			G: uint8(float64(bg.G)*(1-alpha) + float64(rgb[1])*alpha),
 			B: uint8(float64(bg.B)*(1-alpha) + float64(rgb[2])*alpha),
