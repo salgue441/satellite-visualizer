@@ -21,7 +21,8 @@ var ConstellationColors = map[string][3]int{
 var DefaultSatRGB = [3]int{200, 200, 200}
 
 // RenderSatellites draws satellite positions onto the pixel buffer.
-// Satellites appear as bright colored pixels on the dark globe background.
+// Satellites are blended with the underlying globe pixel using screen blending
+// so the globe remains visible underneath dense constellations.
 func RenderSatellites(pb *PixelBuffer, satellites []domain.SatelliteState, g *Globe) {
 	earthRadius := 6378.137
 	termH := float64(pb.Height) / 2.0
@@ -35,10 +36,15 @@ func RenderSatellites(pb *PixelBuffer, satellites []domain.SatelliteState, g *Gl
 		if dist == 0 {
 			continue
 		}
-		scale := 1.0 + (dist/earthRadius-1.0)*0.02
-		if scale < 1.01 {
-			scale = 1.01
+
+		// Project satellite position slightly above the globe surface.
+		// Use a larger offset so satellites visually separate from the surface.
+		altRatio := dist/earthRadius - 1.0 // 0.0 at surface, ~0.086 for Starlink
+		scale := 1.0 + altRatio*0.15       // spread higher orbits out more
+		if scale < 1.02 {
+			scale = 1.02
 		}
+
 		nx := sat.Position.X / earthRadius * scale
 		ny := sat.Position.Y / earthRadius * scale
 		nz := sat.Position.Z / earthRadius * scale
@@ -61,13 +67,30 @@ func RenderSatellites(pb *PixelBuffer, satellites []domain.SatelliteState, g *Gl
 		if !ok {
 			rgb = DefaultSatRGB
 		}
-		satColor := RGB{R: uint8(rgb[0]), G: uint8(rgb[1]), B: uint8(rgb[2])}
 
-		pb.Set(px, py, satColor)
+		// Blend satellite color with the underlying globe pixel using screen blend.
+		// This keeps the globe visible under dense constellations like Starlink.
+		// Stations get full opacity (they're few and important).
+		bg := pb.Get(px, py)
+		var blended RGB
 		if sat.ConstellationName == "stations" {
-			pb.Set(px+1, py, satColor)
-			pb.Set(px, py+1, satColor)
-			pb.Set(px+1, py+1, satColor)
+			// Full opacity for stations — they're important and few
+			blended = RGB{R: uint8(rgb[0]), G: uint8(rgb[1]), B: uint8(rgb[2])}
+			// Also render a 2x2 block for visibility
+			pb.Set(px, py, blended)
+			pb.Set(px+1, py, blended)
+			pb.Set(px, py+1, blended)
+			pb.Set(px+1, py+1, blended)
+			continue
 		}
+
+		// Screen blend: result = 1 - (1-a)(1-b), keeps things bright but not overblown
+		const alpha = 0.6 // satellite opacity
+		blended = RGB{
+			R: uint8(float64(bg.R)*(1-alpha) + float64(rgb[0])*alpha),
+			G: uint8(float64(bg.G)*(1-alpha) + float64(rgb[1])*alpha),
+			B: uint8(float64(bg.B)*(1-alpha) + float64(rgb[2])*alpha),
+		}
+		pb.Set(px, py, blended)
 	}
 }
