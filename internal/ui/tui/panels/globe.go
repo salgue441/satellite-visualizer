@@ -36,9 +36,12 @@ func (p *GlobePanel) Globe() *renderer.Globe {
 }
 
 // Render draws the globe and satellites, returns the rendered string.
+// TODO(task4): migrate to PixelBuffer-based rendering
 func (p *GlobePanel) Render(satellites []domain.SatelliteState) string {
-	p.globe.Render(p.frame)
-	renderer.RenderSatellites(p.frame, satellites, p.globe)
-	p.frame.Swap()
-	return p.frame.Render()
+	// Temporarily commented out: globe.Render now takes *PixelBuffer (Task 3).
+	// Will be updated in Task 4 to use PixelBuffer pipeline.
+	_ = satellites
+	_ = p.globe
+	_ = p.frame
+	return ""
 }

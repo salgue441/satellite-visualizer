@@ -15,73 +15,79 @@ func NewGlobe() *Globe {
 	return &Globe{Radius: 1.0, Zoom: 1.0}
 }
 
-// Render draws the globe into the given frame using ray-sphere intersection.
-// Each terminal cell is mapped to a ray; if it hits the unit sphere, we compute
-// lat/lon after rotation and shade with true-color based on land/ocean and depth.
-func (g *Globe) Render(f *Frame) {
-	f.Clear()
+// Render draws the globe into the given pixel buffer using ray-sphere intersection.
+// Each pixel is mapped to a ray; if it hits the unit sphere, we compute
+// lat/lon after rotation and shade with RGB based on land/ocean and depth.
+func (g *Globe) Render(pb *PixelBuffer) {
+	pb.Clear()
 
-	w, h := f.Width, f.Height
+	w, h := pb.Width, pb.Height
 	if w == 0 || h == 0 {
 		return
 	}
 
 	cx := float64(w) / 2.0
 	cy := float64(h) / 2.0
+	termH := float64(h) / 2.0
+	sphereR := termH * 0.45 * g.Zoom
 
-	// Sphere radius in row-units. Fill ~90% of the vertical space.
-	sphereR := float64(h) * 0.45 * g.Zoom
+	const pixelAspect = 1.0
 
-	// Terminal characters are roughly 2x taller than wide.
-	const charAspect = 2.0
-
-	for sy := 0; sy < h; sy++ {
-		for sx := 0; sx < w; sx++ {
-			// Normalize to unit-sphere coords [-1, 1].
-			nx := (float64(sx) - cx) / (sphereR * charAspect)
-			ny := -(float64(sy) - cy) / sphereR
+	for py := 0; py < h; py++ {
+		for px := 0; px < w; px++ {
+			nx := (float64(px) - cx) / (sphereR * pixelAspect)
+			ny := -(float64(py) - cy) / sphereR
 
 			r2 := nx*nx + ny*ny
 			if r2 > 1.0 {
-				// Outside sphere — atmosphere halo or stars
 				dist := math.Sqrt(r2) - 1.0
-				if dist < 0.06 {
-					ch, color := AtmosphereGlow(dist)
-					if color != "" {
-						f.Set(sx, sy, ch, color)
+				if dist < 0.07 {
+					if c, ok := AtmosphereGlowRGB(dist); ok {
+						pb.Set(px, py, c)
 						continue
 					}
 				}
-				// Sparse star field
-				ch, color := StarField(sx, sy)
-				if color != "" {
-					f.Set(sx, sy, ch, color)
+				if c, ok := StarFieldRGB(px, py); ok {
+					pb.Set(px, py, c)
 				}
 				continue
 			}
 
-			// Point on sphere surface
 			nz := math.Sqrt(1.0 - r2)
 
-			// Apply rotation to get world coordinates
+			edgeAlpha := 1.0
+			if r2 > 0.98 {
+				edgeAlpha = (1.0 - math.Sqrt(r2)) / (1.0 - math.Sqrt(0.98))
+				if edgeAlpha > 1.0 {
+					edgeAlpha = 1.0
+				}
+				if edgeAlpha < 0.0 {
+					edgeAlpha = 0.0
+				}
+			}
+
 			wx, wy, wz := RotateY(nx, ny, nz, -g.RotationY)
 			wx, wy, wz = RotateX(wx, wy, wz, -g.RotationX)
 
-			// Convert to lat/lon
 			lat := math.Asin(wy) * 180.0 / math.Pi
 			lon := math.Atan2(wx, wz) * 180.0 / math.Pi
 
-			// Check for grid lines (every 30° lat/lon)
 			onGrid := isGridLine(lat, lon)
 
-			// nz is the dot product with the view direction — natural lighting value.
+			var c RGB
 			if IsLand(lat, lon) {
-				ch, color := LandShade(lat, nz, onGrid)
-				f.Set(sx, sy, ch, color)
+				c = LandShadeRGB(lat, lon, nz, onGrid)
 			} else {
-				ch, color := OceanShade(lat, nz, onGrid)
-				f.Set(sx, sy, ch, color)
+				c = OceanShadeRGB(nz, onGrid)
 			}
+
+			if edgeAlpha < 1.0 {
+				c.R = uint8(float64(c.R) * edgeAlpha)
+				c.G = uint8(float64(c.G) * edgeAlpha)
+				c.B = uint8(float64(c.B) * edgeAlpha)
+			}
+
+			pb.Set(px, py, c)
 		}
 	}
 }
