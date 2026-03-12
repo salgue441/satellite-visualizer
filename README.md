@@ -2,9 +2,7 @@
 
 A real-time satellite tracker that renders an interactive 3D globe in your terminal. It fetches live TLE (Two-Line Element) data from CelesTrak and Space-Track.org, propagates orbits using SGP4, and displays satellites on a rotating Earth with accurate coastlines, ocean shading, and atmosphere glow.
 
-https://github.com/user-attachments/assets/demo.mp4
-
-<video src="assets/demo.mp4" width="100%" autoplay loop muted></video>
+<video src="https://github.com/salgue441/satellite-visualizer/raw/main/assets/demo.mp4" width="100%" autoplay loop muted></video>
 
 ## Features
 
