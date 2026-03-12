@@ -42,12 +42,12 @@ func (g *Globe) Render(pb *PixelBuffer) {
 			if r2 > 1.0 {
 				dist := math.Sqrt(r2) - 1.0
 				if dist < 0.07 {
-					if c, ok := AtmosphereGlowRGB(dist); ok {
+					if c, ok := AtmosphereGlow(dist); ok {
 						pb.Set(px, py, c)
 						continue
 					}
 				}
-				if c, ok := StarFieldRGB(px, py); ok {
+				if c, ok := StarField(px, py); ok {
 					pb.Set(px, py, c)
 				}
 				continue
@@ -76,9 +76,9 @@ func (g *Globe) Render(pb *PixelBuffer) {
 
 			var c RGB
 			if IsLand(lat, lon) {
-				c = LandShadeRGB(lat, lon, nz, onGrid)
+				c = LandShade(lat, lon, nz, onGrid)
 			} else {
-				c = OceanShadeRGB(nz, onGrid)
+				c = OceanShade(nz, onGrid)
 			}
 
 			if edgeAlpha < 1.0 {

@@ -81,29 +81,29 @@ func TestIsLand_Ocean(t *testing.T) {
 	}
 }
 
-func TestOceanShadeRGB_Range(t *testing.T) {
+func TestOceanShade_Range(t *testing.T) {
 	for _, nz := range []float64{0.0, 0.25, 0.5, 0.75, 1.0} {
-		c := OceanShadeRGB(nz, false)
+		c := OceanShade(nz, false)
 		if c.B <= c.R || c.B <= c.G {
-			t.Errorf("OceanShadeRGB(%v): blue should dominate, got %v", nz, c)
+			t.Errorf("OceanShade(%v): blue should dominate, got %v", nz, c)
 		}
 	}
 }
 
-func TestAtmosphereGlowRGB_ThinHalo(t *testing.T) {
-	c, ok := AtmosphereGlowRGB(0.01)
+func TestAtmosphereGlow_ThinHalo(t *testing.T) {
+	c, ok := AtmosphereGlow(0.01)
 	if !ok || c == (RGB{}) {
-		t.Errorf("AtmosphereGlowRGB(0.01) should return visible glow")
+		t.Errorf("AtmosphereGlow(0.01) should return visible glow")
 	}
-	_, ok = AtmosphereGlowRGB(0.1)
+	_, ok = AtmosphereGlow(0.1)
 	if ok {
-		t.Errorf("AtmosphereGlowRGB(0.1) should return false")
+		t.Errorf("AtmosphereGlow(0.1) should return false")
 	}
 }
 
-func TestLandShadeRGB_VariesByLatitude(t *testing.T) {
-	tropical := LandShadeRGB(5, 0, 0.8, false)
-	polar := LandShadeRGB(80, 0, 0.8, false)
+func TestLandShade_VariesByLatitude(t *testing.T) {
+	tropical := LandShade(5, 0, 0.8, false)
+	polar := LandShade(80, 0, 0.8, false)
 	if tropical == polar {
 		t.Errorf("expected different colors for tropical %v and polar %v", tropical, polar)
 	}
